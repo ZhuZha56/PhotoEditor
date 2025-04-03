@@ -1,21 +1,20 @@
 import os
 from PyQt5.QtWidgets import (
-    QApplication, QWidget,
-    QFileDialog,
-    QLabel, QPushButton, QListWidget,
-    QHBoxLayout, QVBoxLayout
+    QApplication, QWidget, QFileDialog, QLabel, QPushButton, QListWidget,
+    QHBoxLayout, QVBoxLayout, QMessageBox
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
-from PIL import Image
-from PIL import ImageOps
+from PIL import Image, ImageOps
 from PIL.ImageFilter import SHARPEN
 
+# Инициализация приложения
 app = QApplication([])
 win = QWidget()
 win.resize(1000, 800)
-win.setWindowTitle('Easy Editor')
+win.setWindowTitle('Photo Editor')
 
+# Виджеты интерфейса
 lb_image = QLabel("")
 lb_image.setFixedSize(800, 600)
 btn_dir = QPushButton("Папка")
@@ -28,42 +27,47 @@ btn_sharp = QPushButton("Резкость")
 btn_bw = QPushButton("Ч/Б")
 btn_reset = QPushButton("Сбросить")
 
-r = QHBoxLayout()
-l1 = QVBoxLayout()        
-l2 = QVBoxLayout()
-l1.addWidget(btn_dir)
-l1.addWidget(lw_files)
-l2.addWidget(lb_image, 95)
+# Компоновка элементов
+layout_main = QHBoxLayout()
+layout_left = QVBoxLayout()
+layout_right = QVBoxLayout()
+layout_tools = QHBoxLayout()
 
-r_tools = QHBoxLayout()
-r_tools.addWidget(btn_left)
-r_tools.addWidget(btn_right)
-r_tools.addWidget(btn_flip)
-r_tools.addWidget(btn_sharp)
-r_tools.addWidget(btn_bw)
-r_tools.addWidget(btn_reset)
-l2.addLayout(r_tools)
+layout_left.addWidget(btn_dir)
+layout_left.addWidget(lw_files)
+layout_right.addWidget(lb_image, 95)
 
-r.addLayout(l1, 20)
-r.addLayout(l2, 80)
-win.setLayout(r)
+layout_tools.addWidget(btn_left)
+layout_tools.addWidget(btn_right)
+layout_tools.addWidget(btn_flip)
+layout_tools.addWidget(btn_sharp)
+layout_tools.addWidget(btn_bw)
+layout_tools.addWidget(btn_reset)
 
+layout_right.addLayout(layout_tools)
+layout_main.addLayout(layout_left, 20)
+layout_main.addLayout(layout_right, 80)
+
+win.setLayout(layout_main)
 win.show()
 
+# Рабочая директория
 workdir = ''
 
-def filter(files, extensions):
-    return [filename for filename in files if any(filename.endswith(ext) for ext in extensions)]
+def filter_files(files, extensions):
+    """Фильтрация файлов по заданным расширениям."""
+    return [f for f in files if any(f.endswith(ext) for ext in extensions)]
 
-def chooseWorkdir():
+def choose_workdir():
+    """Выбор рабочей директории."""
     global workdir
     workdir = QFileDialog.getExistingDirectory()
 
-def showFilenamesList():
+def show_filenames_list():
+    """Отображение списка изображений в рабочей папке."""
     extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
-    chooseWorkdir()
-    filenames = filter(os.listdir(workdir), extensions)
-
+    choose_workdir()
+    filenames = filter_files(os.listdir(workdir), extensions)
     lw_files.clear()
     lw_files.addItems(filenames)
 
@@ -74,72 +78,88 @@ class ImageProcessor:
         self.filename = None
         self.save_dir = "Modified/"
 
-    def loadImage(self, filename):
+    def load_image(self, filename):
+        """Загрузка изображения."""
         self.filename = filename
         fullname = os.path.join(workdir, filename)
         self.image = Image.open(fullname)
-        self.original_image = self.image.copy()  
+        self.original_image = self.image.copy()
 
     def reset(self):
+        """Сброс изображения к оригинальному состоянию."""
         self.image = self.original_image.copy()
-        self.saveAndShowImage()
+        self.save_and_show_image()
 
-    def saveImage(self):
+    def save_image(self):
+        """Сохранение изображения в папку."""
         path = os.path.join(workdir, self.save_dir)
         os.makedirs(path, exist_ok=True)
         fullname = os.path.join(path, self.filename)
         self.image.save(fullname)
 
+    def apply_filter(self, filter_function):
+        """Применение фильтра к изображению и обновление его."""
+        self.image = filter_function(self.image)
+        self.save_and_show_image()
+
     def do_bw(self):
-        self.image = ImageOps.grayscale(self.image)
-        self.saveAndShowImage()
+        self.apply_filter(ImageOps.grayscale)
 
     def do_left(self):
-        self.image = self.image.transpose(Image.ROTATE_90)
-        self.saveAndShowImage()
+        self.apply_filter(lambda img: img.transpose(Image.ROTATE_90))
 
     def do_right(self):
-        self.image = self.image.transpose(Image.ROTATE_270)
-        self.saveAndShowImage()
+        self.apply_filter(lambda img: img.transpose(Image.ROTATE_270))
 
     def do_flip(self):
-        self.image = self.image.transpose(Image.FLIP_LEFT_RIGHT)
-        self.saveAndShowImage()
+        self.apply_filter(lambda img: img.transpose(Image.FLIP_LEFT_RIGHT))
 
     def do_sharpen(self):
-        self.image = self.image.filter(SHARPEN)
-        self.saveAndShowImage()
+        self.apply_filter(lambda img: img.filter(SHARPEN))
 
-    def saveAndShowImage(self):
-        self.saveImage()
+    def save_and_show_image(self):
+        """Сохранение и отображение изображения."""
+        self.save_image()
         image_path = os.path.join(workdir, self.save_dir, self.filename)
-        self.showImage(image_path)
+        self.show_image(image_path)
 
-    def showImage(self, path):
+    def show_image(self, path):
+        """Отображение изображения в QLabel."""
         lb_image.hide()
-        pixmapimage = QPixmap(path)
-        w, h = lb_image.width(), lb_image.height()
-        pixmapimage = pixmapimage.scaled(w, h, Qt.KeepAspectRatio)
-        lb_image.setPixmap(pixmapimage)
+        pixmap = QPixmap(path).scaled(lb_image.width(), lb_image.height(), Qt.KeepAspectRatio)
+        lb_image.setPixmap(pixmap)
         lb_image.show()
 
-def showChosenImage():
+def show_chosen_image():
+    """Отображение выбранного изображения."""
     if lw_files.currentRow() >= 0:
         filename = lw_files.currentItem().text()
-        workimage.loadImage(filename)
-        workimage.showImage(os.path.join(workdir, workimage.filename))
+        workimage.load_image(filename)
+        workimage.show_image(os.path.join(workdir, workimage.filename))
 
+# Обработчик закрытия окна
+def close_event(event):
+    reply = QMessageBox.question(win, 'Выход', 'Вы точно хотите выйти?',
+                                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    if reply == QMessageBox.Yes:
+        event.accept()
+    else:
+        event.ignore()
 
+win.closeEvent = close_event
+
+# Создание экземпляра обработчика изображений
 workimage = ImageProcessor()
-lw_files.currentRowChanged.connect(showChosenImage)
+lw_files.currentRowChanged.connect(show_chosen_image)
 
+# Подключение кнопок к обработчикам
 btn_bw.clicked.connect(workimage.do_bw)
 btn_left.clicked.connect(workimage.do_left)
 btn_right.clicked.connect(workimage.do_right)
 btn_sharp.clicked.connect(workimage.do_sharpen)
 btn_flip.clicked.connect(workimage.do_flip)
 btn_reset.clicked.connect(workimage.reset)
+btn_dir.clicked.connect(show_filenames_list)
 
-btn_dir.clicked.connect(showFilenamesList)
-
+# Запуск приложения
 app.exec_()
